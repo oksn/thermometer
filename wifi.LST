@@ -1,0 +1,328 @@
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE WIFI
+OBJECT MODULE PLACED IN wifi.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE wifi.c COMPACT BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include <stdio.h>
+   2          #include <reg52.h>
+   3          #include <intrins.h>
+   4          #include <wifi.h>
+   5          #include <delay.h>
+   6          #include <string.h>
+   7          #include <uart.h>
+   8          extern uchar flag2;
+   9          extern unsigned char UART2_len;
+  10          extern unsigned char UART2_Rec[150];
+  11          extern xdata unsigned char ip_adr[16];
+  12          unsigned char seek_cr, reseek;
+  13          unsigned int timeover;
+  14          unsigned char seekdot;
+  15          sbit  LED_ready = P3 ^ 2;
+  16          sbit  LED_link = P3 ^ 3;
+  17          sbit  LED_serial = P1 ^ 0;
+  18          
+  19          uchar  tcp_link ( void )
+  20          {
+  21   1          bit tcp_link_stats;
+  22   1          flag2 = 0;
+  23   1          UART2_len = 0;
+  24   1          UART2_SendOneChar ( 0x2b );
+  25   1          UART2_SendOneChar ( 0x2b );
+  26   1          UART2_SendOneChar ( 0x2b );
+  27   1      
+  28   1          flag2 = 0;
+  29   1          UART2_len = 0;
+  30   1          timeover = 0;
+  31   1          delay400Ms();
+  32   1          UART2_SendOneChar ( 'a' );
+  33   1      
+  34   1          do
+  35   1          {
+  36   2              delay5Ms();
+  37   2              timeover++;
+  38   2              if ( timeover == 350 )
+  39   2              {
+  40   3                  tcp_link_stats = 2;
+  41   3                  break;
+  42   3              }
+  43   2          }
+  44   1          while ( ! ( flag2 == 2 ) );
+  45   1      
+  46   1          flag2 = 0;
+  47   1          UART2_len = 0;
+  48   1          timeover = 0;
+  49   1          //       if (UART2_Rec[0]=='a') UART2_len=0;
+  50   1      
+  51   1          UART2_SendStr ( "AT+TCPLK\r\n" );
+  52   1      
+  53   1      
+  54   1          do
+  55   1          {
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 2   
+
+  56   2              delay5Ms();
+  57   2              timeover++;
+  58   2              if ( timeover == 350 ) break;
+  59   2          }
+  60   1          while ( ! ( flag2 == 3 ) );
+  61   1      
+  62   1      
+  63   1          for ( seek_cr = 1; seek_cr < UART2_len - 2; seek_cr++ )
+  64   1          {
+  65   2              if ( ( UART2_Rec[seek_cr-1] == 0x0d ) && ( UART2_Rec[seek_cr] == 0x0a ) ) // ½«·µ»ØµÄ×Ö·û´®±äÎªÒ»Ð
+             -Ð,È¥³ýÇ°ÃæµÄ»»ÐÐ
+  66   2              {
+  67   3                  UART2_Rec[seek_cr-1] = 0x2d;
+  68   3                  UART2_Rec[seek_cr] = 0x2d;
+  69   3                  UART2_Rec[seek_cr+1] = 0x2d;
+  70   3                  break;
+  71   3              }
+  72   2      
+  73   2          }
+  74   1          if ( ( strstr ( UART2_Rec, "+ok=on" ) > 0 ) )
+  75   1          {
+  76   2              //  DisplayListChar ( 0, 4, "TCP link is on  " );
+  77   2              tcp_link_stats = 1;
+  78   2          }
+  79   1          else
+  80   1          {
+  81   2              tcp_link_stats = 0;
+  82   2          }
+  83   1      
+  84   1          flag2 = 0;
+  85   1          UART2_len = 0;
+  86   1          timeover = 0;
+  87   1          UART2_SendStr ( "AT+ENTM\r\n" );
+  88   1          do
+  89   1          {
+  90   2              delay5Ms();
+  91   2              timeover++;
+  92   2              if ( timeover == 350 )
+  93   2              {
+  94   3                  tcp_link_stats = 3;
+  95   3                  break;
+  96   3              }
+  97   2          }
+  98   1          while ( ! ( flag2 == 3 ) );
+  99   1          return tcp_link_stats;
+ 100   1      }
+ 101          
+ 102          void ip_add ( void )
+ 103          {
+ 104   1          flag2 = 0;
+ 105   1          UART2_len = 0;
+ 106   1          UART2_SendOneChar ( 0x2b );
+ 107   1          UART2_SendOneChar ( 0x2b );
+ 108   1          UART2_SendOneChar ( 0x2b );
+ 109   1      
+ 110   1          flag2 = 0;
+ 111   1          UART2_len = 0;
+ 112   1          timeover = 0;
+ 113   1          delay400Ms();
+ 114   1          UART2_SendOneChar ( 'a' );
+ 115   1      
+ 116   1          do
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 3   
+
+ 117   1          {
+ 118   2              delay5Ms();
+ 119   2              timeover++;
+ 120   2              if ( timeover == 350 )
+ 121   2              {
+ 122   3                  break;
+ 123   3              }
+ 124   2          }
+ 125   1          while ( ! ( flag2 == 2 ) );
+ 126   1      
+ 127   1          flag2 = 0;
+ 128   1          UART2_len = 0;
+ 129   1          timeover = 0;
+ 130   1      
+ 131   1          UART2_SendStr ( "AT+WANN\r\n" );
+ 132   1      
+ 133   1      
+ 134   1          do
+ 135   1          {
+ 136   2              delay5Ms();
+ 137   2              timeover++;
+ 138   2              if ( timeover == 350 ) break;
+ 139   2          }
+ 140   1          while ( ! ( flag2 == 3 ) );
+ 141   1      
+ 142   1          strncpy ( ip_adr, UART2_Rec + 19, 16 );
+ 143   1          seekdot = 0;
+ 144   1          for ( seek_cr = 1; seek_cr < 16; seek_cr++ ) //ÔÚ×Ö·û´®ÖÐ²éÕÒÖ¸¶¨×Ö·ûµÄÎ»ÖÃ
+ 145   1          {
+ 146   2              if ( ip_adr[seek_cr] == 0x2c ) break;
+ 147   2              seekdot++;
+ 148   2          }
+ 149   1          for ( seek_cr = seekdot + 1; seek_cr < 16; seek_cr++ ) //È¥³ýÒÔºóµÄ×Ö·û
+ 150   1          {
+ 151   2              ip_adr[seek_cr] = 0x20;
+ 152   2          }
+ 153   1      
+ 154   1      
+ 155   1          flag2 = 0;
+ 156   1          UART2_len = 0;
+ 157   1          timeover = 0;
+ 158   1          UART2_SendStr ( "AT+ENTM\r\n" );
+ 159   1          do
+ 160   1          {
+ 161   2              delay5Ms();
+ 162   2              timeover++;
+ 163   2              if ( timeover == 350 )
+ 164   2              {
+ 165   3                  break;
+ 166   3              }
+ 167   2          }
+ 168   1          while ( ! ( flag2 == 3 ) );
+ 169   1      
+ 170   1      }
+ 171          
+ 172          void wifi_reboot ( void )
+ 173          {
+ 174   1          flag2 = 0;
+ 175   1          UART2_len = 0;
+ 176   1          UART2_SendOneChar ( 0x2b );
+ 177   1          UART2_SendOneChar ( 0x2b );
+ 178   1          UART2_SendOneChar ( 0x2b );
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 4   
+
+ 179   1      
+ 180   1          flag2 = 0;
+ 181   1          UART2_len = 0;
+ 182   1          timeover = 0;
+ 183   1          delay400Ms();
+ 184   1          UART2_SendOneChar ( 'a' );
+ 185   1      
+ 186   1          do
+ 187   1          {
+ 188   2              delay5Ms();
+ 189   2              timeover++;
+ 190   2              if ( timeover == 350 )
+ 191   2              {
+ 192   3                  break;
+ 193   3              }
+ 194   2          }
+ 195   1          while ( ! ( flag2 == 2 ) );
+ 196   1      
+ 197   1          flag2 = 0;
+ 198   1          UART2_len = 0;
+ 199   1          timeover = 0;
+ 200   1      
+ 201   1          UART2_SendStr ( "AT+Z\r\n" );
+ 202   1      
+ 203   1      }
+ 204          
+ 205          
+ 206          void WSLQ ( void )
+ 207          {
+ 208   1          flag2 = 0;
+ 209   1          UART2_len = 0;
+ 210   1          UART2_SendOneChar ( 0x2b );
+ 211   1          UART2_SendOneChar ( 0x2b );
+ 212   1          UART2_SendOneChar ( 0x2b );
+ 213   1      
+ 214   1          flag2 = 0;
+ 215   1          UART2_len = 0;
+ 216   1          timeover = 0;
+ 217   1          delay400Ms();
+ 218   1          UART2_SendOneChar ( 'a' );
+ 219   1      
+ 220   1          do
+ 221   1          {
+ 222   2              delay5Ms();
+ 223   2              timeover++;
+ 224   2              if ( timeover == 350 )
+ 225   2              {
+ 226   3                  break;
+ 227   3              }
+ 228   2          }
+ 229   1          while ( ! ( flag2 == 2 ) );
+ 230   1          for ( seek_cr = 0; seek_cr < UART2_len; seek_cr++ )  //Çå³ý½ÓÊÕÇø
+ 231   1          {
+ 232   2              UART2_Rec[seek_cr] = 0x2c;
+ 233   2          }
+ 234   1          flag2 = 0;
+ 235   1          UART2_len = 0;
+ 236   1          timeover = 0;
+ 237   1      
+ 238   1          UART2_SendStr ( "AT+WSLQ\r\n" );
+ 239   1      
+ 240   1      
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 5   
+
+ 241   1          do
+ 242   1          {
+ 243   2              delay5Ms();
+ 244   2              timeover++;
+ 245   2              if ( timeover == 350 ) break;
+ 246   2          }
+ 247   1          while ( ! ( flag2 == 3 ) );
+ 248   1      
+ 249   1          for ( seek_cr = 1; seek_cr < UART2_len - 2; seek_cr++ )
+ 250   1          {
+ 251   2              if ( ( UART2_Rec[seek_cr-1] == 0x0d ) && ( UART2_Rec[seek_cr] == 0x0a ) ) // ½«·µ»ØµÄ×Ö·û´®±äÎªÒ»Ð
+             -Ð,È¥³ýÇ°ÃæµÄ»»ÐÐ
+ 252   2              {
+ 253   3                  UART2_Rec[seek_cr-1] = 0x2d;
+ 254   3                  UART2_Rec[seek_cr] = 0x2d;
+ 255   3                  UART2_Rec[seek_cr+1] = 0x2d;
+ 256   3                  break;
+ 257   3              }
+ 258   2      
+ 259   2          }
+ 260   1          if ( ( strstr ( UART2_Rec, "+ok=" ) > 0 ) )
+ 261   1          {
+ 262   2              //  DisplayListChar ( 0, 4, "TCP link is on  " );
+ 263   2         strncpy ( ip_adr,  "                ", 16 );
+ 264   2        
+ 265   2          strncpy ( ip_adr, UART2_Rec + 10,7);
+ 266   2         
+ 267   2      
+ 268   2      
+ 269   2      
+ 270   2          }
+ 271   1          else
+ 272   1          {
+ 273   2              strncpy ( ip_adr, "Error!", 16 );
+ 274   2          }
+ 275   1      
+ 276   1      
+ 277   1      
+ 278   1          flag2 = 0;
+ 279   1          UART2_len = 0;
+ 280   1          timeover = 0;
+ 281   1          UART2_SendStr ( "AT+ENTM\r\n" );
+ 282   1          do
+ 283   1          {
+ 284   2              delay5Ms();
+ 285   2              timeover++;
+ 286   2              if ( timeover == 350 )
+ 287   2              {
+ 288   3                  break;
+ 289   3              }
+ 290   2          }
+ 291   1          while ( ! ( flag2 == 3 ) );
+ 292   1      
+ 293   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1123    ----
+   CONSTANT SIZE    =     84    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =      5    ----
+   DATA SIZE        =   ----    ----
+C51 COMPILER V7.06   WIFI                                                                  02/19/2020 11:27:54 PAGE 6   
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

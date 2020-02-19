@@ -1,0 +1,288 @@
+#include "stc12c5a60s2.h"
+#include <intrins.h>
+#include <stdio.h>
+#include  "config.h"
+#include "delay.h"
+#include "uart.h"
+#include "oled.h"
+#include "bmp.h"
+#include "sht11.h"
+#include "wifi.h"
+xdata unsigned char UART2_Rec[150];
+xdata unsigned char UART2_len = 0;
+extern bit doubleBaud;
+extern bit timeMod;
+extern uchar RELOAD;
+//xdata unsigned char  LCD_linne2[]="                ";
+unsigned char  LCD_linne1[]="0123456789abcdef";
+unsigned char  LCD_linne2[]="0123456789abcdef";
+unsigned char  LCD_linne3[]="0123456789abcdef";
+unsigned char  LCD_linne4[]="0123456789abcdef";
+unsigned  int idata js = 0,thisLength;
+uchar flag2, tcp;
+idata float adc, adcout;
+sbit WIFI_Ready = P3 ^ 2;
+sbit WIFI_Link = P3 ^ 3;
+unsigned  int idata temp1, moist1, sendtime, linkerror, webackerror;
+unsigned char idata tem1[7] ;
+unsigned char checksum1=0; 
+float  xdata RealHumiVal;
+float  xdata RealTemVal;
+
+uchar CO2_data[9] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+xdata unsigned char      ip_adr[] = "0123456789ABCDEF";
+uchar flag2, tcp;
+unsigned char seek_cr1, reseek1;
+
+//uint8 UART1_Recv_Val;
+
+
+void http_sendData ( uchar *Data_temp, uchar *Data_humi,uchar *Data_NH3 )
+{
+    // send the HTTP PUT request: 核心代码
+    flag2 = 0;
+    UART2_len = 0;
+    //  timeover = 0;
+   UART2_SendStr("POST /getRemoteInfo.do HTTP/1.1\r\n"); // 01代表01网关，如果是02网关这里换成02
+UART2_SendStr("userkey: 7EF2F2763826EFFD3E7FEE9A6238CE76\r\n");  //乐联网userkey
+UART2_SendStr("devCode: cjsb01\r\n");  //乐联网userkey
+UART2_SendStr("Referer: http://gprs.oksn.com:9008/\r\n"); 
+UART2_SendStr("Accept-Language: zh-cn\r\n");
+UART2_SendStr("Content-Type: application/x-www-form-urlencoded\r\n");
+UART2_SendStr("Accept-Encoding: gzip, deflate\r\n");
+UART2_SendStr("User-Agent: Mozilla/4.0 (compatible; MSIE 6.00; Windows NT 5.0; MyIE 3.01)\r\n");    
+UART2_SendStr("Host: gprs.oksn.com:9008\r\n");
+UART2_SendStr("Connection: close\r\n");
+UART2_SendStr("Content-Length: 122\r\n");    //发送数据的长度
+UART2_SendStr("Cache-Control: no-cache\r\n");
+    UART2_SendStr("\r\n");     //这个换行很关键，代表Head结束
+    // here's the actual content of the PUT request:
+    UART2_SendStr ( "[{\"Name\":\"nh3\",\"Value\":" );  //此处根据平台新建的设备标识修改BH、P5、H1、T1
+    UART2_SendStr ( "\"" );
+    UART2_SendOneChar ( Data_NH3[6] ); //以下为发送的数据
+    UART2_SendOneChar ( Data_NH3[7] );
+    UART2_SendOneChar ( Data_NH3[8] );
+	UART2_SendOneChar ( Data_NH3[9] );
+	UART2_SendOneChar ( Data_NH3[10] );
+    UART2_SendStr ( "\"}," );
+	UART2_SendStr ( "{\"Name\":\"wd\",\"Value\":" );
+    UART2_SendStr ( "\"" );
+    UART2_SendOneChar ( Data_temp[5] ); //以下为发送的数据
+    UART2_SendOneChar ( Data_temp[6] );
+    UART2_SendOneChar ( Data_temp[7] );
+    UART2_SendOneChar ( Data_temp[8] );
+    UART2_SendOneChar ( Data_temp[9] );
+    UART2_SendStr ( "\"}," );
+    UART2_SendStr ( "{\"Name\":\"sd\",\"Value\":" );
+    UART2_SendStr ( "\"" );
+    UART2_SendOneChar ( Data_humi[5] ); //以下为发送的数据
+    UART2_SendOneChar ( Data_humi[6] );
+    UART2_SendOneChar ( Data_humi[7] );
+    UART2_SendOneChar ( Data_humi[8] );
+    UART2_SendOneChar ( Data_humi[9] );
+    UART2_SendStr ( "\"" );
+    UART2_SendStr ( "}]" );
+//     UART2_SendStr("\r\n");
+}
+
+
+void main(void)
+{     
+
+	   RealHumiVal = 0;
+     RealTemVal = 0;
+  //    uint32 val32 = 0;
+         
+  
+  //	UART1_Init ( RELOAD, doubleBaud, timeMod );
+  //  UART2_Init ( RELOAD, doubleBaud, timeMod );
+	UART1_Init ( RELOAD, doubleBaud, timeMod );
+    UART2_Init ( RELOAD, doubleBaud, timeMod );
+   	OLED_Init();			//初始化OLED  
+		OLED_Clear();
+ 	    OLED_DrawBMP(0,0,127,7,BMP1);
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		delay400Ms ();
+		OLED_Clear();
+  // B_LUX_Init(); 
+	 js = 0;
+     WDT_CONTR = 0x3f;
+	 adcout = 0;
+    sendtime = 0;
+  
+    linkerror = 0;
+    webackerror = 0;
+      while(1)
+      {
+
+        if ( sendtime==1 )
+        {
+
+        OLED_ShowCHinese(0,0,0);//温
+		OLED_ShowCHinese(16,0,1);//度
+		OLED_ShowCHinese(32,0,2);//湿
+		OLED_ShowCHinese(48,0,3);//度
+		OLED_ShowCHinese(64,0,4);//氨
+		OLED_ShowCHinese(80,0,5);//气
+		OLED_ShowCHinese(96,0,6);//采
+		OLED_ShowCHinese(112,0,7);//集
+		    UART1_SendOneChar ( 0xff );
+            UART1_SendOneChar ( 0x01 );
+            UART1_SendOneChar ( 0x86 );
+            UART1_SendOneChar ( 0x00 );
+            UART1_SendOneChar ( 0x00 );
+            UART1_SendOneChar ( 0x00 );
+            UART1_SendOneChar ( 0x00 );
+            UART1_SendOneChar ( 0x00 );
+            UART1_SendOneChar ( 0x79 );
+            
+            if ( FlgSHT11GetVal )
+            {
+                GetSht11Value();
+                sprintf (LCD_linne1, "Temp:%4.1f C", RealTemVal );
+				OLED_ShowString(0,2,LCD_linne1); 
+				sprintf ( LCD_linne2, "Humi:%4.1f %%", RealHumiVal);
+                OLED_ShowString(0,4,LCD_linne2); 
+            }
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+            delay5Ms();
+
+
+            checksum1 = 0;
+            checksum1 += CO2_data[1];
+            checksum1 += CO2_data[2];
+            checksum1 += CO2_data[3];
+            checksum1 += CO2_data[4];
+            checksum1 += CO2_data[5];
+            checksum1 += CO2_data[6];
+            checksum1 += CO2_data[7];
+            checksum1 = 0xff - checksum1;
+            checksum1 += 0x01;
+            if  ( checksum1 == CO2_data[8] )
+            {
+               
+               adc = CO2_data[2] * 256 + CO2_data[3];
+                sprintf ( LCD_linne4, "NH3:  %4.2f ppm", adc/100.0 );
+                OLED_ShowString(0,6,LCD_linne4); 
+            }
+         
+        }
+
+        if ( sendtime == 20 )
+        {
+            OLED_ShowString(0,0,"Checking network"); 
+	               
+            if ( WIFI_Ready == 0 )        tcp = tcp_link();
+            if ( tcp == 1 )
+            {
+                WSLQ();
+                // DisplayListChar ( 0, 3, "TCP on" );
+
+         //       DisplayListChar ( 0, 2, ip_adr );
+				 OLED_ShowString(0,2, ip_adr); 
+                //     http_sendData ( LCD_linne2, LCD_linne3, LCD_linne4 );
+                // linkerror = 0;
+            }
+            else
+            {
+         
+				 OLED_ShowString(0,2,"TCP link is off "); 
+                //  linkerror++;
+            }
+
+ for ( seek_cr1 = 0; seek_cr1 < UART2_len; seek_cr1++ )  //清除接收区
+            {
+                UART2_Rec[seek_cr1] = 0x2c;
+            }
+
+
+            if ( WIFI_Ready == 0 )
+            {
+                ip_add();
+             //   DisplayListChar ( 0, 3, ip_adr );
+				 OLED_ShowString(0,4,ip_adr); 
+            }
+
+           
+
+            if ( WIFI_Ready == 0 )  tcp = tcp_link();
+
+            if ( tcp == 1 )
+            {
+             //   http_sendData ( LCD_linne2, LCD_linne3, LCD_linne4 );
+				http_sendData(LCD_linne1,LCD_linne2,LCD_linne4);
+                //DisplayListChar ( 0, 4, "HTTP sending... " );
+				OLED_ShowString(0,6,"TCP link is off "); 
+				linkerror = 0;
+            }
+            else
+            {
+
+                if ( linkerror == 3 ) //连续失败重启模块
+                {
+                    wifi_reboot();
+                    linkerror = 0;
+                }
+                linkerror++;
+            }
+        }
+
+
+   if ( sendtime == 40 )  //判断是否第40次运行
+            {
+                for ( seek_cr1 = 1; seek_cr1 < UART2_len - 2; seek_cr1++ )
+                {
+                    if ( ( UART2_Rec[seek_cr1-1] == 0x0d ) && ( UART2_Rec[seek_cr1] == 0x0a ) ) // 将返回的字符串变为一行,去除前面的换行
+                    {
+                        UART2_Rec[seek_cr1-1] = 0x2d;
+                        UART2_Rec[seek_cr1] = 0x2d;
+                     }
+                }
+
+                UART1_SendStr ( UART2_Rec );
+                if ( ( strstr ( UART2_Rec, "success" ) > 0 ) )
+                {
+                    webackerror = 0;
+                    strncpy ( ip_adr, UART2_Rec + 60, 16 );
+                 	OLED_ShowString(0,6,"HTTP Upload OK  "); 
+                   }
+                else
+                {
+				OLED_ShowString(0,6,"HTTP send error!");
+                    webackerror++;
+                    if ( webackerror > 5 )   //
+                    {
+                        wifi_reboot();
+                        webackerror = 0;
+                    }
+                }
+            }
+       if ( sendtime >= 50 )  //判断是否
+        {
+            sendtime = 0;
+		   
+        }
+       delay400Ms();
+        sendtime++;
+        WDT_CONTR = 0x3f;
+ }
